@@ -1,7 +1,7 @@
 {
-  "name": "turhan-tv-panel",
+  "name": "Zafer-tv-panel",
   "version": "1.0.0",
-  "description": "Turhan TV Panel Tarayıcı Masaüstü Uygulaması",
+  "description": "Zaferr TV Panel Tarayıcı Masaüstü Uygulaması",
   "main": "main.js",
   "scripts": {
     "start": "electron ."
